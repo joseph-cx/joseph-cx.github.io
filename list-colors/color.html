@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://p.trellocdn.com/power-up.min.css" />
+    <script src="https://p.trellocdn.com/power-up.min.js"></script>
+    <script src="./config.js"></script>
+    <style>
+      body { margin: 0; padding: 4px 2px; }
+      .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+      .swatch {
+        height: 36px; border: 2px solid transparent; border-radius: 6px;
+        cursor: pointer; padding: 0;
+      }
+      .swatch:hover { transform: scale(1.06); }
+      .swatch:focus-visible { outline: 2px solid #0c66e4; outline-offset: 2px; }
+      .swatch.active { border-color: #172b4d; }
+      #status { margin-top: 10px; min-height: 18px; font-size: 13px; }
+      #status.error { color: #c9372c; }
+      #connect { display: none; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <button id="connect" class="mod-primary">Connect your Trello account</button>
+    <div id="picker" class="grid"></div>
+    <div id="status" role="status"></div>
+
+    <script>
+      var t = window.TrelloPowerUp.iframe({
+        appKey: window.LC_CONFIG.appKey,
+        appName: window.LC_CONFIG.appName
+      });
+
+      var COLORS = [
+        ['gray', '#8c9bab'], ['green', '#4bce97'], ['yellow', '#f5cd47'],
+        ['orange', '#fea362'], ['red', '#f87168'], ['purple', '#9f8fef'],
+        ['blue', '#579dff'], ['teal', '#60c6d2'], ['lime', '#94c748'],
+        ['magenta', '#e774bb']
+      ];
+
+      var listId = t.arg('listId');
+      var api = t.getRestApi();
+      var statusEl = document.getElementById('status');
+      var picker = document.getElementById('picker');
+      var connectBtn = document.getElementById('connect');
+
+      function setStatus(msg, isError) {
+        statusEl.textContent = msg;
+        statusEl.className = isError ? 'error' : '';
+      }
+
+      COLORS.forEach(function (c) {
+        var b = document.createElement('button');
+        b.className = 'swatch';
+        b.style.background = c[1];
+        b.title = c[0];
+        b.setAttribute('aria-label', c[0]);
+        b.onclick = function () { applyColor(c[0], b); };
+        picker.appendChild(b);
+      });
+
+      function applyColor(color, btn) {
+        setStatus('Applying…');
+        api.getToken().then(function (token) {
+          var url = 'https://api.trello.com/1/lists/' + encodeURIComponent(listId) +
+            '?key=' + encodeURIComponent(window.LC_CONFIG.appKey) +
+            '&token=' + encodeURIComponent(token) +
+            '&color=' + encodeURIComponent(color);
+          return fetch(url, { method: 'PUT' });
+        }).then(function (res) {
+          if (!res.ok) {
+            return res.text().then(function (txt) {
+              throw new Error(res.status + ' ' + txt);
+            });
+          }
+          document.querySelectorAll('.swatch').forEach(function (s) { s.classList.remove('active'); });
+          btn.classList.add('active');
+          setStatus('Color updated.');
+          return t.closePopup();
+        }).catch(function (err) {
+          setStatus('Could not change color: ' + err.message, true);
+        });
+      }
+
+      function showConnect() {
+        picker.style.display = 'none';
+        connectBtn.style.display = 'block';
+      }
+
+      connectBtn.onclick = function () {
+        api.authorize({ scope: 'read,write', expiration: 'never' }).then(function () {
+          connectBtn.style.display = 'none';
+          picker.style.display = 'grid';
+          setStatus('Connected. Pick a color.');
+        }).catch(function () {
+          setStatus('Connection was cancelled or blocked.', true);
+        });
+      };
+
+      api.isAuthorized().then(function (ok) { if (!ok) showConnect(); });
+    </script>
+  </body>
+</html>
